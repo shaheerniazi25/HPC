@@ -1,0 +1,112 @@
+BORIS PUSHER — EVERYTHING WE PLANNED
+=====================================
+Date: 2026-09-24 | OS: Debian 13 | g++ 14.2 | cmake 3.31 | SFML 2.6.2
+
+1. INITIAL REQUEST
+-----------------
+"Create a boris pusher in C++."
+Clarified: the standard ~50-year-old Boris (1970) algorithm for advancing
+charged-particle position and momentum in E/B fields for plasma / PIC codes.
+Choices locked via questions:
+- Graphics: SFML 2D
+- Level: beginner friendly (C++17, no Eigen, no templates)
+- Physics: non-relativistic only (no gamma factor)
+- Demos: cyclotron + E x B drift
+- Particles: many (N ~ 500)
+
+2. PHYSICS PLAN
+--------------
+Per particle, q/m, dt, E/B at x_n:
+  v_minus = v + (q/m)*E*dt/2
+  t = (q/m)*B*dt/2
+  v_prime = v_minus + v_minus x t
+  s = 2*t / (1 + |t|^2)
+  v_plus = v_minus + v_prime x s
+  v_new = v_plus + (q/m)*E*dt/2
+  x_new = x + v_new*dt
+Full Vec3 for v/E/B; render x-y projection.
+Theory for HUD/checks:
+  omega_c = |q/m|*B, r_L = v_perp/omega_c, v_d = E x B / B^2.
+
+3. PROJECT LAYOUT PLAN (~/boris-pusher/)
+---------------------------------------
+  CMakeLists.txt  (C++17, -Wall, find_package SFML 2.6 graphics/window/system)
+  src/vec3.h      (struct Vec3 + +-*/dot/cross/norm, no external lib)
+  src/particle.h  (struct Particle { Vec3 x, v; double q_over_m = -1; })
+  src/fields.h/.cpp (enum FieldCase {Cyclotron, ExB}; FieldParams{B0=1,E0=1};
+                     Cyclotron: E=0,B=(0,0,B0); ExB: E=(E0,0,0),B=(0,0,B0))
+  src/boris.h/.cpp  (void boris_step(Particle&, Vec3 E, Vec3 B, double dt))
+  src/main.cpp      (cloud init, --test mode, SFML loop)
+
+4. SFML VISUALIZATION PLAN (500-particle cloud)
+----------------------------------------------
+- Window 1000x800, 60 fps, orthographic world->screen, view_half_w=12.
+- Fixed dt=0.05 (omega_c*dt~0.05), 4 substeps/frame, decoupled from framerate.
+- Draw: sf::Points (N=500) colored blue->red by |v|; trails for first 5
+  as LineStrip, len 150, yellow.
+- HUD (DejaVuSans): t, N, dt, omega_c, r_L, vd, keys.
+- Controls: 1=cyclotron, 2=ExB, Space=pause, R=reset, Esc=quit.
+- Bounds: wrap-around x+-11, y+-9 (uniform fields, exact, keeps density).
+- Fallback: --test headless mode printing validation numbers (no window).
+
+5. BUILD + VALIDATION PLAN
+-------------------------
+  sudo apt install libsfml-dev   (done on side, verified 2.6.2)
+  cmake -S . -B build && cmake --build build -j4
+  ./build/boris-pusher --test
+Checks:
+  - Pure B: |v| conserved to <1e-6, r_L = 2 for v=2.
+  - ExB: mean <vy> within 0.05 of -E0/B0 = -1.
+  - Halving dt reduces error.
+Result: PASSED (speed err 3.4e-15, <vy>=-0.9945).
+
+6. 4-PARTICLE / BOX UPDATE PLAN
+------------------------------
+Request: 4 particles, bigger size, box around bounds + "ask me what we can
+do with 4 particles".
+Questions asked and answers locked:
+- Purpose: bounded box physics
+- Box: fixed domain box
+- Size: large circles ~10px
+Plan (main.cpp only, boris/fields untouched):
+- Quad-mode auto when N<=4: 4x CircleShape(r=10), distinct colors
+  red/green/cyan/yellow + white outline, matching trail colors.
+- Fixed box x in [-11,11], y in [-9,9] as RectangleShape transparent fill +
+  white 2px outline via world_to_screen(); same BOX_X/BOX_Y used in physics.
+- Physics wrap -> reflect_walls(): clamp x + flip normal v (specular,
+  elastic, |v| preserved, applied after boris_step as boundary condition).
+- Init N==4: fixed corners (-5,4),(5,4),(-5,-4),(5,-4), phases 0,1.7,3.1,4.5,
+  |v|=2.
+- Trails: one per particle in quad mode.
+
+7. SECOND FOLDER PLAN
+--------------------
+Request: "make a second folder to put this new one in".
+Questions locked: name = boris-pusher-box, method = full copy, diverge.
+Plan:
+- cp -r ~/boris-pusher ~/boris-pusher-box; rm -rf new build/ (fresh cache).
+- CMakeLists: project boris-pusher-box, executable boris-box (run side by
+  side with original boris-pusher).
+- Apply quad/box/reflect changes ONLY in new folder; default N=4 there
+  (--particles still overrides, >4 falls back to points+wrap).
+- Build: cmake -S . -B build && cmake --build build -j4
+- Validate: ./build/boris-box --test must pass; manual
+  ./build/boris-box [--exb] shows box + bounces; re-run original --test.
+Result: PASSED both binaries (89KB box binary, same physics numbers).
+Tradeoff accepted: diverged copies need manual backport of boris.cpp fixes.
+
+8. WHAT EACH SIMULATION DOES (summary)
+-------------------------------------
+- boris-pusher (500): plasma-soup view; cyclotron = overlapping circles going
+  nowhere; ExB = whole cloud drifts -y at 1.0 while gyrating; wrap keeps it
+  on screen.
+- boris-pusher-box (4): trackable orbits; same fields but elastic bounces off
+  visible white box; cyclotron = circles + bounces; ExB = downward cycloids
+  bouncing off floor.
+
+9. PROPOSED NEXT STEPS (asked, not yet built)
+--------------------------------------------
+1. Compare runs: different v0 / q/m per particle (electron vs ion), live x,v.
+2. Bounce lab: hit counts, energy before/after, absorbing vs reflecting walls.
+3. Orbit measure: overlay expected Larmor circle + drift arrow.
+4. Interactive: click-drag initial velocity, single-step dt.

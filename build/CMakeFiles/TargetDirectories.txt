@@ -1,0 +1,3 @@
+/home/localuser/boris-pusher-box/build/CMakeFiles/boris-box.dir
+/home/localuser/boris-pusher-box/build/CMakeFiles/edit_cache.dir
+/home/localuser/boris-pusher-box/build/CMakeFiles/rebuild_cache.dir
